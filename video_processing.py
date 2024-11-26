@@ -1,14 +1,12 @@
 import cv2
 import numpy as np
 import pytesseract
-
 from utils import calcular_linha_parada, formatar_data_hora
 from object_tracking import atualizar_rastreadores
 from infractions import salvar_infracao
 from utils import adicionar_texto_utf8
 from config import (CLASSES_OF_INTEREST, CONFIDENCE_THRESHOLD, SEMAFORO_ALTURA_REAL,
                     DISTANCIA_SEMAFORO_LINHA_PARADA, TESSERACT_CMD)
-
 
 def aplicar_desfoque_placas(frame, det_placas):
     """Aplica desfoque nas placas detectadas no frame."""
@@ -29,7 +27,6 @@ def aplicar_desfoque_placas(frame, det_placas):
             continue
         roi_blur = cv2.GaussianBlur(roi, (51, 51), 0)
         frame[y1p:y2p, x1p:x2p] = roi_blur
-
 
 def processar_frame(
         frame, modelo, trackers, estado_semaforo, posicao_linha_parada,
@@ -135,15 +132,12 @@ def processar_frame(
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), cor, 2)
 
-        
         adicionar_texto_utf8(
             frame,
             rotulo,
             (x1 + 20, y1 - 10),
             cor
         )
-        # cv2.putText(frame, rotulo, (x1, y1 - 10),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.9, cor, 2)
 
     # Selecionar o semáforo mais alto no frame
     if semaforos:
@@ -241,7 +235,7 @@ def processar_frame(
                     semaforo_mais_alto,
                     posicao_linha_parada[0],
                     arquivo_entrada,
-                    frame_count,
+                    frame_count,  # Passe o frame atual
                     fps
                 )
                 # Desenhar alerta
@@ -251,8 +245,6 @@ def processar_frame(
                     (x1 + 20, y1 - 20),
                     (0, 0, 255)
                 )
-                # cv2.putText(frame, f'INFRAÇÃO Moto {track_id}', (x1, y1 - 20),
-                #             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
             else:
                 # Já foi registrada a infração
                 pass
@@ -264,7 +256,7 @@ def processar_frame(
         cv2.putText(frame, f'Moto {track_id}', (x1, y1 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-    # Aplicar desfoque nas placas detectadas
+    # Aplicar desfoque nas placas detectadas (Fazer isso por último, após todos os processos)
     aplicar_desfoque_placas(frame, det_placas)
 
     # Adicionar data e hora no canto inferior direito

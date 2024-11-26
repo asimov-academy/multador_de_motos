@@ -1,7 +1,7 @@
 import os
 import cv2
-
-from datetime import datetime 
+from datetime import datetime
+from utils import adicionar_texto_utf8
 from config import DURACAO_PRE_INFRACTION, DURACAO_POS_INFRACTION, INFRACTIONS_FOLDER
 
 def salvar_infracao(
@@ -33,23 +33,16 @@ def salvar_infracao(
         (0, 0, 255)
     )
 
-    # cv2.putText(frame_anotado, f'INFRAÇÃO Moto {track_id}', (x1, y1 - 20),
-    #             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-
     if semaforo_mais_alto['dados'] and semaforo_mais_alto['dados']['bbox']:
         x1_s, y1_s, x2_s, y2_s = semaforo_mais_alto['dados']['bbox']
         cv2.rectangle(frame_anotado, (x1_s, y1_s), (x2_s, y2_s), (0, 0, 255), 2)
 
-        
         frame_anotado = adicionar_texto_utf8(
             frame_anotado,
             f'Semáforo {semaforo_mais_alto["dados"]["id"]} (RED)',
             (x1_s + 20, y1_s - 10),
             (0, 0, 255)
         )
-        
-        # cv2.putText(frame_anotado, f'Semáforo {semaforo_mais_alto["dados"]["id"]} (RED)',
-        #             (x1_s, y1_s - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
     # Desenhar linha de parada
     altura_frame, largura_frame, _ = frame_anotado.shape
@@ -76,9 +69,10 @@ def salvar_infracao(
     # Adicionar à lista de infrações
     infracoes_detectadas.append({
         'id_moto': track_id,
-        'tempo_infracao': tempo_infracao_frame,
+        'tempo_infracao': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
         'placa': placa_texto,
-        'pasta': caminho_pasta
+        'pasta': caminho_pasta,
+        'tempo_infracao_frame': tempo_infracao_frame  # Adicione esta linha
     })
 
 def salvar_videos_infracao(
@@ -98,11 +92,11 @@ def salvar_videos_infracao(
     # Vídeo original
     caminho_video_original = os.path.join(caminho_pasta, f'video_original_{track_id}.mp4')
     # Vídeo com anotações
-    # caminho_video_anotado = os.path.join(caminho_pasta, f'video_anotado_{track_id}.mp4')
+    caminho_video_anotado = os.path.join(caminho_pasta, f'video_anotado_{track_id}.mp4')
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out_original = cv2.VideoWriter(caminho_video_original, fourcc, fps, (largura, altura))
-    # out_anotado = cv2.VideoWriter(caminho_video_anotado, fourcc, fps, (largura, altura))
+    out_anotado = cv2.VideoWriter(caminho_video_anotado, fourcc, fps, (largura, altura))
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, inicio_frame)
     frame_idx = inicio_frame
@@ -129,16 +123,13 @@ def salvar_videos_infracao(
         if semaforo_mais_alto['dados'] and semaforo_mais_alto['dados']['bbox']:
             x1_s, y1_s, x2_s, y2_s = semaforo_mais_alto['dados']['bbox']
             cv2.rectangle(frame_anotado, (x1_s, y1_s), (x2_s, y2_s), (0, 0, 255), 2)
-            
+
             frame_anotado = adicionar_texto_utf8(
                 frame_anotado,
                 f'Semáforo {semaforo_mais_alto["dados"]["id"]} (RED)',
                 (x1_s + 20, y1_s - 10),
                 (0, 0, 255)
             )
-            
-            # cv2.putText(frame_anotado, f'Semaforo {semaforo_mais_alto["dados"]["id"]} (RED)',
-            #             (x1_s, y1_s - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
         # Desenhar linha de parada
         cv2.line(frame_anotado, (0, linha_parada_y),
@@ -147,9 +138,9 @@ def salvar_videos_infracao(
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
 
         out_original.write(frame)
-        # out_anotado.write(frame_anotado)
+        out_anotado.write(frame_anotado)
         frame_idx += 1
 
     cap.release()
     out_original.release()
-    # out_anotado.release()
+    out_anotado.release()

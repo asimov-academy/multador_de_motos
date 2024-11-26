@@ -3,3 +3,6 @@ numpy
 ultralytics
 pytesseract
 deep-sort-realtime
+PyQt5
+PyQtGraph
+Pillow

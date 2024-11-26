@@ -7,7 +7,6 @@ def inicializar_rastreadores():
     tracker_semaforos = DeepSort(max_age=DEEPSORT_MAX_AGE)
     return tracker_motos, tracker_semaforos
 
-
 def atualizar_rastreadores(tracker_motos, tracker_semaforos, det_motos, det_semaforos, frame):
     """Atualiza os rastreadores com as detecções atuais."""
     tracks_motos = tracker_motos.update_tracks(det_motos, frame=frame)
