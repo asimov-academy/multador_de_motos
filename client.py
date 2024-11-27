@@ -1,23 +1,30 @@
+# client.py
+
+import sys
 import cv2
 import asyncio
 import websockets
 import json
 import numpy as np
+import qasync
 
-async def send_frames(uri, video_path):
+from PyQt5.QtWidgets import QApplication
+from client_interface import MainWindow
+
+async def send_frames(uri, video_path, window):
     async with websockets.connect(uri) as websocket:
-        cap = cv2.VideoCapture(video_path)  # Ou use 0 para webcam
+        cap = cv2.VideoCapture(video_path)  # Use 0 for webcam or provide video path
         frame_id = 0
         running = True
 
-        # Filas para gerenciar envio e recebimento
+        # Queues to manage sending and receiving
         send_queue = asyncio.Queue()
         receive_queue = asyncio.Queue()
 
-        # Iniciar tarefas de envio e recebimento
+        # Start send and receive tasks
         send_task = asyncio.create_task(send_frames_task(cap, websocket, send_queue, receive_queue, frame_id, running))
         receive_task = asyncio.create_task(receive_frames_task(websocket, receive_queue, running))
-        process_task = asyncio.create_task(process_frames_task(receive_queue))
+        process_task = asyncio.create_task(process_frames_task(receive_queue, window))
 
         await asyncio.gather(send_task, receive_task, process_task)
 
@@ -34,26 +41,23 @@ async def send_frames_task(cap, websocket, send_queue, receive_queue, frame_id, 
         if frame_id % 3 == 0:
             continue
 
-        # Codificar frame em bytes e converter para hexadecimal
+        # Encode frame to bytes and convert to hexadecimal
         _, buffer = cv2.imencode('.jpg', frame)
         frame_bytes = buffer.tobytes()
         frame_hex = frame_bytes.hex()
 
-        # Preparar a mensagem a ser enviada
+        # Prepare the message to be sent
         message = {
             'frame_id': frame_id,
             'frame': frame_hex,
-            # Outros parâmetros, se necessário
+            # Other parameters if necessary
         }
 
-        # Enviar mensagem para o servidor
+        # Send message to the server
         await websocket.send(json.dumps(message))
 
-        # Opcionalmente, armazenar o frame original associado ao frame_id
-        # await send_queue.put((frame_id, frame))
-
-        # Controlar a taxa de envio, se necessário
-        await asyncio.sleep(0)  # Pode ajustar o valor conforme necessário
+        # Control the sending rate if necessary
+        await asyncio.sleep(0)  # Adjust the value as needed
 
 async def receive_frames_task(websocket, receive_queue, running):
     while running:
@@ -65,33 +69,54 @@ async def receive_frames_task(websocket, receive_queue, running):
             frame_anotado_hex = response['frame_anotado']
             detected_moto = response['detected_moto']
             detected_semaforo = response['detected_semaforo']
+            infracoes_detectadas = response['infracoes_detectadas']
+            frame_moto_hex_list = response.get('frame_moto_hex_list', [])
 
-            # Converter frame anotado de volta para imagem
+            # Convert frame_anotado back to image
             frame_anotado_bytes = bytes.fromhex(frame_anotado_hex)
             nparr = np.frombuffer(frame_anotado_bytes, np.uint8)
             frame_anotado = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-            # Adicionar à fila de recebimento
-            await receive_queue.put((frame_id, frame_anotado, detected_moto, detected_semaforo))
+            # Convert frame_moto_hex_list back to images
+            frame_moto_list = []
+            for frame_moto_hex in frame_moto_hex_list:
+                if frame_moto_hex:
+                    frame_moto_bytes = bytes.fromhex(frame_moto_hex)
+                    nparr = np.frombuffer(frame_moto_bytes, np.uint8)
+                    frame_moto = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    frame_moto_list.append(frame_moto)
+                else:
+                    frame_moto_list.append(None)
+
+            # Add to receive queue
+            await receive_queue.put((frame_id, frame_anotado, detected_moto, detected_semaforo, frame_moto_list, infracoes_detectadas))
         except websockets.exceptions.ConnectionClosed:
             break
+        except Exception as e:
+            print(f"Error receiving frames: {e}")
+            break
 
-async def process_frames_task(receive_queue):
+async def process_frames_task(receive_queue, window):
     while True:
         if not receive_queue.empty():
-            frame_id, frame_anotado, detected_moto, detected_semaforo = await receive_queue.get()
-
-            # Exibir frame anotado
-            cv2.imshow('Frame Anotado', frame_anotado)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            frame_id, frame_anotado, detected_moto, detected_semaforo, frame_moto_list, infracoes_detectadas = await receive_queue.get()
+            # Emit signals to update the GUI
+            window.update_frame_signal.emit(frame_anotado)
+            window.update_infractions_signal.emit(frame_moto_list, infracoes_detectadas)
         else:
-            await asyncio.sleep(0.01)  # Pequeno delay para evitar loop ocupado
+            await asyncio.sleep(0.01)
 
 if __name__ == '__main__':
     uri = "ws://192.168.1.5:8000/ws"
-    video_path = 'videos/2024-11-12 14-14-33.mp4'
-    video_path = 'videos/dirigindo_pela_primeira_vez_no_centro_da_cidade!_Av_Afonso_Pena!.mp4'
-    video_path = 0
+    video_path = 0  # Use 0 for webcam or provide video path
+    video_path = 'videos/video_30s.mp4'
 
-    asyncio.get_event_loop().run_until_complete(send_frames(uri, video_path))
+    app = QApplication(sys.argv)
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+    window = MainWindow()
+    window.show()
+
+    with loop:
+        loop.create_task(send_frames(uri, video_path, window))
+        loop.run_forever()
